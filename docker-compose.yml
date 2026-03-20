@@ -1,0 +1,51 @@
+version: "3"
+
+services:
+  connector-malpedia-samples:
+    image: opencti/connector-malpedia-samples:latest
+    # build: .   # décommenter pour build local
+    environment:
+      # ── OpenCTI ─────────────────────────────────────────────────────
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=ChangeMe
+
+      # ── Connector ───────────────────────────────────────────────────
+      - CONNECTOR_ID=ChangeMe                   # uuidgen
+      - CONNECTOR_NAME=Malpedia Samples
+      - CONNECTOR_SCOPE=artifact,malware
+      - CONNECTOR_LOG_LEVEL=info
+      - CONNECTOR_DURATION_PERIOD=P7D           # ISO 8601 — toutes les semaines
+
+      # ── Malpedia ────────────────────────────────────────────────────
+      - MALPEDIA_AUTH_KEY=ChangeMe              # Clé API compte de confiance
+
+      # Format des samples: raw | zip | both
+      - MALPEDIA_SAMPLE_FORMAT=both
+
+      # Filtre par famille (vide = toutes les familles)
+      # Exemple: win.cobalt_strike,win.mimikatz
+      - MALPEDIA_FAMILIES_FILTER=
+
+      # true = seulement unpacked/dumped (plus propres pour analyse)
+      - MALPEDIA_UNPACKED_ONLY=false
+
+      # Labels appliqués à chaque artifact (séparés par virgule)
+      - MALPEDIA_LABELS=malpedia
+      - MALPEDIA_LABELS_COLOR=#7f3b08
+
+      # TLP appliqué aux artifacts et entités créées
+      # Options: TLP:WHITE, TLP:CLEAR, TLP:GREEN, TLP:AMBER, TLP:RED
+      - MALPEDIA_TLP=TLP:AMBER
+
+      # Importer les Intrusion Sets (acteurs) associés aux familles
+      - MALPEDIA_IMPORT_INTRUSION_SETS=true
+
+      # Importer les règles YARA comme Indicators
+      - MALPEDIA_IMPORT_YARA=true
+
+      # Délai en secondes entre chaque téléchargement de sample (politesse API)
+      - MALPEDIA_DOWNLOAD_DELAY=1
+
+    restart: always
+    depends_on:
+      - opencti
