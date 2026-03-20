@@ -298,8 +298,9 @@ class MalpediaSamplesConnector:
         label_ids: list,
         work_id: str,
     ) -> str | None:
-        """Upload binary data as an OpenCTI Artifact and return its ID."""
+        """Upload binary data as an OpenCTI Artifact, then apply labels and markings."""
         try:
+            # Step 1: Upload the artifact (basic fields only)
             artifact = self.helper.api.stix_cyber_observable.upload_artifact(
                 file_name=file_name,
                 data=io.BytesIO(data),
@@ -307,12 +308,40 @@ class MalpediaSamplesConnector:
                 x_opencti_description=(
                     f"Malpedia sample — SHA256: {sha256}"
                 ),
-                object_marking_refs=[self._tlp_marking["id"]]
-                if self._tlp_marking
-                else [],
-                object_label_ids=label_ids,
             )
-            return artifact.get("id") if artifact else None
+            if not artifact:
+                return None
+
+            artifact_id = artifact.get("id")
+            if not artifact_id:
+                return None
+
+            # Step 2: Apply TLP marking
+            if self._tlp_marking:
+                try:
+                    self.helper.api.stix_cyber_observable.add_marking_definition(
+                        id=artifact_id,
+                        marking_definition_id=self._tlp_marking["id"],
+                    )
+                except Exception as e:
+                    self.helper.log_warning(
+                        f"Could not apply TLP marking to {file_name}: {e}"
+                    )
+
+            # Step 3: Apply labels
+            for label_id in label_ids:
+                try:
+                    self.helper.api.stix_cyber_observable.add_label(
+                        id=artifact_id,
+                        label_id=label_id,
+                    )
+                except Exception as e:
+                    self.helper.log_warning(
+                        f"Could not apply label {label_id} to {file_name}: {e}"
+                    )
+
+            return artifact_id
+
         except Exception as e:
             self.helper.log_error(f"Artifact upload failed ({file_name}): {e}")
             return None
