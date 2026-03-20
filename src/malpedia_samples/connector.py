@@ -67,6 +67,9 @@ class MalpediaSamplesConnector:
         # Resolve TLP marking definition from OpenCTI
         self._tlp_marking = self._resolve_tlp(self.config.malpedia_tlp)
 
+        # Create or resolve the "Malpedia" organization (used as createdBy)
+        self._malpedia_org_id = self._ensure_malpedia_organization()
+
     # ------------------------------------------------------------------ #
     # Entry point
     # ------------------------------------------------------------------ #
@@ -340,6 +343,18 @@ class MalpediaSamplesConnector:
                         f"Could not apply label {label_id} to {file_name}: {e}"
                     )
 
+            # Step 4: Set author (createdBy → Malpedia organization)
+            if self._malpedia_org_id:
+                try:
+                    self.helper.api.stix_cyber_observable.update_field(
+                        id=artifact_id,
+                        input={"key": "createdBy", "value": self._malpedia_org_id},
+                    )
+                except Exception as e:
+                    self.helper.log_warning(
+                        f"Could not set author on {file_name}: {e}"
+                    )
+
             return artifact_id
 
         except Exception as e:
@@ -430,6 +445,7 @@ class MalpediaSamplesConnector:
                 description=description,
                 aliases=aliases if aliases else [],
                 is_family=True,
+                createdBy=self._malpedia_org_id,
                 externalReferences=[
                     {
                         "source_name": "Malpedia",
@@ -490,6 +506,7 @@ class MalpediaSamplesConnector:
                     name=actor_name,
                     description=actor_description,
                     aliases=actor_aliases,
+                    createdBy=self._malpedia_org_id,
                     externalReferences=[
                         {
                             "source_name": "Malpedia",
@@ -554,6 +571,7 @@ class MalpediaSamplesConnector:
                         pattern_type="yara",
                         pattern=raw_rule,
                         x_opencti_main_observable_type="StixFile",
+                        createdBy=self._malpedia_org_id,
                         indicates=[malware_id] if malware_id else [],
                         object_marking_refs=[self._tlp_marking["id"]]
                         if self._tlp_marking
@@ -586,6 +604,52 @@ class MalpediaSamplesConnector:
             except Exception as e:
                 self.helper.log_warning(f"Label '{label}' error: {e}")
         return ids
+
+    # ------------------------------------------------------------------ #
+    # OpenCTI helpers — Organization (author)
+    # ------------------------------------------------------------------ #
+
+    def _ensure_malpedia_organization(self) -> str | None:
+        """
+        Get or create the 'Malpedia' organization in OpenCTI.
+        Used as createdBy (author) on all imported objects.
+        """
+        org_name = "Malpedia"
+        org_description = (
+            "Malpedia is a free service offered by Fraunhofer FKIE. "
+            "It provides a curated and annotated corpus of malware families "
+            "with context like threat actors, YARA rules and samples."
+        )
+        try:
+            existing = self.helper.api.identity.read(
+                filters={
+                    "mode": "and",
+                    "filters": [
+                        {"key": "name", "values": [org_name]},
+                        {"key": "entity_type", "values": ["Organization"]},
+                    ],
+                    "filterGroups": [],
+                }
+            )
+            if existing:
+                self.helper.log_info(
+                    f"Malpedia organization found: {existing.get('id')}"
+                )
+                return existing.get("id")
+
+            org = self.helper.api.identity.create(
+                type="Organization",
+                name=org_name,
+                description=org_description,
+            )
+            if org:
+                self.helper.log_info(
+                    f"Malpedia organization created: {org.get('id')}"
+                )
+                return org.get("id")
+        except Exception as e:
+            self.helper.log_warning(f"Could not create Malpedia organization: {e}")
+        return None
 
     # ------------------------------------------------------------------ #
     # OpenCTI helpers — TLP
